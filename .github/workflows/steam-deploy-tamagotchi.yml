@@ -1,0 +1,139 @@
+name: Steam Deploy Tamagotchi
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_branch:
+        description: Steam branch to set live after upload
+        required: true
+        default: internal-test
+        type: string
+      windows_depot_id:
+        description: Steam depot ID for Windows content
+        required: true
+        default: '3885342'
+        type: string
+      build_description:
+        description: Optional Steam build description
+        required: false
+        type: string
+      debug_branch:
+        description: Include debug files in the uploaded depot
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  build-windows:
+    name: Build Windows unpacked app
+    runs-on: windows-latest
+    outputs:
+      build_description: ${{ steps.metadata.outputs.build_description }}
+      version: ${{ steps.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm run build:packages
+
+      - run: pnpm run -F @proj-airi/stage-tamagotchi build
+
+      - name: Build unpacked Windows app
+        run: pnpm -F @proj-airi/stage-tamagotchi exec electron-builder build --windows --x64 --dir --publish=never
+
+      - name: Validate Steam upload content
+        shell: pwsh
+        run: |
+          $exePath = 'apps/stage-tamagotchi/dist/win-unpacked/airi.exe'
+          if (!(Test-Path $exePath)) {
+            Write-Error "Expected Steam launch executable was not found at $exePath"
+          }
+
+      - name: Resolve build metadata
+        id: metadata
+        shell: pwsh
+        env:
+          INPUT_BUILD_DESCRIPTION: ${{ inputs.build_description }}
+        run: |
+          $version = node -p "require('./apps/stage-tamagotchi/package.json').version"
+          $description = $env:INPUT_BUILD_DESCRIPTION
+          if ([string]::IsNullOrWhiteSpace($description)) {
+            $shortSha = '${{ github.sha }}'.Substring(0, 7)
+            $description = "AIRI $version Windows x64 $shortSha"
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "build_description=$description" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Steam content artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: steam-windows-x64
+          path: apps/stage-tamagotchi/dist/win-unpacked/**
+          if-no-files-found: error
+
+  deploy-steam:
+    name: Upload to Steam
+    runs-on: ubuntu-latest
+    needs: build-windows
+    steps:
+      - name: Download Steam content artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: steam-windows-x64
+          path: steam-build/windows
+
+      - name: Validate Steam credentials
+        env:
+          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+          STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
+          STEAM_RELEASE_BRANCH: ${{ inputs.release_branch }}
+          WINDOWS_DEPOT_ID: ${{ inputs.windows_depot_id }}
+        run: |
+          if [ -z "$STEAM_USERNAME" ]; then
+            echo "Missing STEAM_USERNAME secret."
+            exit 1
+          fi
+
+          if [ -z "$STEAM_CONFIG_VDF" ]; then
+            echo "Missing STEAM_CONFIG_VDF secret."
+            exit 1
+          fi
+
+          case "$WINDOWS_DEPOT_ID" in
+            ''|*[!0-9]*)
+              echo "windows_depot_id must be a numeric Steam depot ID."
+              exit 1
+              ;;
+          esac
+
+          if [ "$STEAM_RELEASE_BRANCH" = "default" ]; then
+            echo "Refusing to set Steam's default branch from CI. Upload to a test branch, then promote manually in Steamworks."
+            exit 1
+          fi
+
+      - name: Deploy Windows build to Steam
+        uses: game-ci/steam-deploy@v3.2.0
+        with:
+          username: ${{ secrets.STEAM_USERNAME }}
+          configVdf: ${{ secrets.STEAM_CONFIG_VDF }}
+          appId: 3885340
+          firstDepotIdOverride: ${{ inputs.windows_depot_id }}
+          buildDescription: ${{ needs.build-windows.outputs.build_description }}
+          rootPath: steam-build
+          depot1Path: windows
+          releaseBranch: ${{ inputs.release_branch }}
+          debugBranch: ${{ inputs.debug_branch }}
