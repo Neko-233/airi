@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
 
+import { t } from '../../modules/admin-locale'
+
 export interface AdminListColumn {
   key: string
   label: string
@@ -94,7 +96,7 @@ function submitPage() {
           <input v-model="searchDraft" class="field w-72" :placeholder="searchPlaceholder" type="search">
           <button class="btn btn-secondary" type="submit">
             <span class="i-lucide-search" />
-            Search
+            {{ t('action.search') }}
           </button>
         </form>
         <label v-for="filter in filters" :key="filter.key" class="flex items-center gap-2 text-sm text-neutral-500">
@@ -149,17 +151,17 @@ function submitPage() {
     <div v-if="loading && !initialLoading" class="border-t border-neutral-100 px-5 py-3 text-sm text-neutral-500">
       <span class="inline-flex items-center gap-2">
         <span class="i-lucide-loader-2 animate-spin" />
-        Loading page {{ loadingPage ?? currentPage }}
+        {{ t('common.loadingPage', { page: loadingPage ?? currentPage }) }}
       </span>
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
       <div class="text-sm text-neutral-500">
-        Page {{ currentPage }} of {{ totalPages }} · {{ pageStart }}-{{ pageEnd }} of {{ totalItems.toLocaleString() }} items
+        {{ t('common.pageOf', { page: currentPage, total: totalPages }) }} · {{ pageStart }}-{{ pageEnd }} / {{ totalItems.toLocaleString() }} {{ t('common.items') }}
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <form class="flex items-center gap-2" @submit.prevent="submitPage">
-          <span class="text-sm text-neutral-500">Go to</span>
+          <span class="text-sm text-neutral-500">{{ t('action.go') }}</span>
           <input
             v-model="pageDraft"
             class="field w-20 text-center"
@@ -170,15 +172,15 @@ function submitPage() {
           >
           <button class="btn btn-secondary" :disabled="loading" type="submit">
             <span v-if="loading" class="i-lucide-loader-2 animate-spin" />
-            Go
+            {{ t('action.go') }}
           </button>
         </form>
         <button class="btn btn-secondary" :disabled="loading || !hasPreviousPage" type="button" @click="emit('page', currentPage - 1)">
           <span :class="loading && loadingPage === currentPage - 1 ? 'i-lucide-loader-2 animate-spin' : 'i-lucide-chevron-left'" />
-          Previous
+          {{ t('action.previous') }}
         </button>
         <button class="btn btn-secondary" :disabled="loading || !hasNextPage" type="button" @click="emit('page', currentPage + 1)">
-          Next
+          {{ t('action.next') }}
           <span :class="loading && loadingPage === currentPage + 1 ? 'i-lucide-loader-2 animate-spin' : 'i-lucide-chevron-right'" />
         </button>
       </div>

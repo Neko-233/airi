@@ -6,7 +6,10 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { Toaster } from 'vue-sonner'
 
 import App from './App.vue'
+import AuditLogPage from './pages/AuditLogPage.vue'
 import FluxPage from './pages/FluxPage.vue'
+import HealthPage from './pages/HealthPage.vue'
+import InsightsPage from './pages/InsightsPage.vue'
 import LlmRouterPage from './pages/LlmRouterPage.vue'
 import OverviewPage from './pages/OverviewPage.vue'
 import UsersPage from './pages/UsersPage.vue'
@@ -27,6 +30,9 @@ const router = createRouter({
     { path: '/flux', component: FluxPage },
     { path: '/llm-router', component: LlmRouterPage },
     { path: '/voice-packs', component: VoicePacksPage },
+    { path: '/insights', component: InsightsPage },
+    { path: '/audit-log', component: AuditLogPage },
+    { path: '/health', component: HealthPage },
     { path: '/voice-packs/new', name: 'voice-pack-new', component: VoicePackFormPage },
     { path: '/voice-packs/:id/edit', name: 'voice-pack-edit', component: VoicePackFormPage },
   ],

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Callout, FieldTextArea } from '@proj-airi/ui'
+import { Button, Callout, DoubleCheckButton, FieldTextArea } from '@proj-airi/ui'
 
 defineProps<{
   error: string | null
@@ -59,15 +59,21 @@ const json = defineModel<string>({ required: true })
           :loading="busy === 'advanced-preview'"
           @click="emit('preview')"
         />
-        <Button
-          icon="i-lucide-save"
-          label="Apply JSON"
+        <DoubleCheckButton
           size="sm"
-          type="button"
+          variant="caution"
           :disabled="disabled || error != null"
           :loading="busy === 'advanced-apply'"
-          @click="emit('apply')"
-        />
+          @confirm="emit('apply')"
+        >
+          <span :class="['inline-flex', 'items-center', 'gap-2']">
+            <span :class="['i-lucide-save']" />
+            Apply JSON
+          </span>
+          <template #confirm>
+            Confirm JSON
+          </template>
+        </DoubleCheckButton>
       </div>
     </div>
   </section>

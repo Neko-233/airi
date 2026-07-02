@@ -14,6 +14,7 @@
     "@proj-airi/stage-shared": "workspace:^",
     "@proj-airi/ui": "workspace:^",
     "@vueuse/core": "^14.2.1",
+    "naive-ui": "catalog:",
     "nprogress": "catalog:",
     "pinia": "catalog:",
     "vue": "catalog:",

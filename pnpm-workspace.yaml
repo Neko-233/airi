@@ -299,6 +299,7 @@ catalog:
   minisearch: ^7.2.0
   mkcert: ^3.2.0
   motion-v: ^2.2.1
+  naive-ui: ^2.44.1
   nano-staged: ^1.0.2
   nanoid: ^5.1.9
   node-pty: ^1.1.0

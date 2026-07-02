@@ -10,14 +10,28 @@ import LlmRouterPage from './LlmRouterPage.vue'
 const mocks = vi.hoisted(() => ({
   applyRouterConfig: vi.fn(),
   routerConfig: vi.fn(),
+  routerConfigHistory: vi.fn(),
+  rollbackRouterConfig: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
 }))
 
 vi.mock('../modules/api', () => ({
+  AdminApiError: class AdminApiError extends Error {
+    constructor(
+      message: string,
+      public readonly status: number,
+      public readonly payload: unknown,
+    ) {
+      super(message)
+      this.name = 'AdminApiError'
+    }
+  },
   adminApi: {
     applyRouterConfig: mocks.applyRouterConfig,
     routerConfig: mocks.routerConfig,
+    routerConfigHistory: mocks.routerConfigHistory,
+    rollbackRouterConfig: mocks.rollbackRouterConfig,
   },
 }))
 
@@ -58,6 +72,26 @@ describe('llm router page', () => {
         },
       },
     })
+    mocks.routerConfigHistory.mockResolvedValue({
+      versions: [{
+        id: 'version-1',
+        version: 12,
+        actor: { id: 'admin-1', name: 'Admin', email: 'admin@example.com' },
+        summary: 'Switch chat default',
+        request: { mode: 'merge', slices: [], defaults: {} },
+        preview: {},
+        createdAt: '2026-06-10T00:00:00.000Z',
+        rollbackable: true,
+      }],
+      hasMore: false,
+      nextOffset: null,
+      total: 1,
+    })
+    mocks.rollbackRouterConfig.mockResolvedValue({
+      applied: [],
+      invalidatedKeys: [],
+      preview: {},
+    })
     document.body.innerHTML = '<div id="app"></div>'
     host = document.querySelector('#app')!
     app = createApp(LlmRouterPage)
@@ -71,6 +105,8 @@ describe('llm router page', () => {
 
   it('starts as a form-first router config editor', () => {
     expect(host.textContent).toContain('Router Config Form')
+    expect(host.textContent).toContain('Change Review')
+    expect(host.textContent).toContain('Version History')
     expect(host.textContent).toContain('Provider configuration')
     expect(host.textContent).toContain('LLM')
     expect(host.textContent).toContain('TTS')
@@ -199,6 +235,36 @@ describe('llm router page', () => {
       },
     }, true)
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Router config preview generated')
+  })
+
+  it('requires confirmation before applying the built form payload', async () => {
+    const keyInput = host.querySelector<HTMLInputElement>('input[type="password"]')
+    keyInput!.value = 'sk-openrouter'
+    keyInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    buttonByText('Apply').click()
+    await nextTick()
+
+    expect(mocks.applyRouterConfig).not.toHaveBeenCalled()
+
+    buttonByText('Confirm Apply').click()
+    await nextTick()
+    await flushPromises()
+
+    expect(mocks.applyRouterConfig).toHaveBeenCalledWith({
+      mode: 'merge',
+      slices: [{
+        kind: 'openrouter',
+        modelName: 'chat-default',
+        overrideModel: 'openai/gpt-4o-mini',
+        plaintextKey: 'sk-openrouter',
+        baseURL: 'https://openrouter.ai/api/v1',
+      }],
+      defaults: {
+        chatModel: 'chat-default',
+      },
+    }, false)
   })
 
   it('exports the current form to advanced JSON', async () => {

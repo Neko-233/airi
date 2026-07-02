@@ -1,3 +1,12 @@
+import {
+  mockAdminAuditLogs,
+  mockAdminHealth,
+  mockAdminMe,
+  mockAdminMetrics,
+  mockAdminProductInsights,
+  mockAdminReliabilityInsights,
+  shouldUseMockAdminApi,
+} from './mock-admin-api'
 import { defaultApiServerUrl, getServerAdminBootstrapContext } from './server-admin-context'
 
 export interface AdminUser {
@@ -27,6 +36,223 @@ export interface AdminMetrics {
   llmFlux24h: number
   adminSeats: number
   grafanaEmbedUrl: string | null
+}
+
+/**
+ * Represents the normalized status vocabulary for admin insight metrics.
+ */
+export type AdminInsightStatus = 'ok' | 'warning' | 'critical' | 'unknown'
+
+/**
+ * Represents one product or reliability insight metric surfaced to operators.
+ */
+export interface AdminInsightMetric {
+  /** Stable metric identifier used for localization and display grouping. */
+  id: string
+  /** Fallback human-readable label supplied by the API. */
+  label: string
+  /** Already aggregated metric value. */
+  value: number | string
+  /** Optional unit label, such as `ms` or `%`. */
+  unit: string | null
+  /** Operator-facing status tier for badges and sorting. */
+  status: AdminInsightStatus
+  /** Fallback description supplied by the API. */
+  description: string
+  /** Deep link to the owning analytics or observability surface. */
+  href: string | null
+}
+
+/**
+ * Represents one row inside a grouped insight breakdown.
+ */
+export interface AdminInsightBreakdownItem {
+  /** Stable item identifier used for localization and list keys. */
+  id: string
+  /** Fallback human-readable label supplied by the API. */
+  label: string
+  /** Primary row value. */
+  value: number | string
+  /** Optional primary unit label. */
+  unit: string | null
+  /** Optional secondary value, such as unique users or share. */
+  secondaryValue: string | null
+  /** Operator-facing status tier for row badges. */
+  status: AdminInsightStatus
+  /** Fallback row description supplied by the API. */
+  description: string
+  /** Deep link to the owning analytics or observability surface. */
+  href: string | null
+}
+
+/**
+ * Represents a grouped product or reliability detail section.
+ */
+export interface AdminInsightBreakdown {
+  /** Stable breakdown identifier used for localization and display grouping. */
+  id: string
+  /** Fallback human-readable heading supplied by the API. */
+  label: string
+  /** Fallback description supplied by the API. */
+  description: string
+  /** Rows inside this breakdown. */
+  items: AdminInsightBreakdownItem[]
+}
+
+/**
+ * Represents PostHog-backed product analytics for the admin console.
+ */
+export interface AdminProductInsights {
+  /** Whether the server has enough PostHog configuration to query live data. */
+  configured: boolean
+  /** Stable source identifier. */
+  source: 'posthog'
+  /** Rolling time window used by the backend aggregate query. */
+  windowDays: number
+  /** Optional deep link to the richer PostHog dashboard. */
+  dashboardUrl: string | null
+  /** Product activation and voice usage metrics. */
+  metrics: AdminInsightMetric[]
+  /** Detailed event rollups grouped by product question. */
+  breakdowns: AdminInsightBreakdown[]
+  /** ISO timestamp for when the server generated this response. */
+  updatedAt: string
+  /** Non-fatal query error when the integration is configured but unavailable. */
+  errorMessage: string | null
+}
+
+/**
+ * Represents one Grafana alert rule row shown in the admin console.
+ */
+export interface AdminReliabilityAlertRule {
+  /** Stable alert rule identifier. */
+  id: string
+  /** Human-readable Grafana alert rule name. */
+  name: string
+  /** Grafana folder or folder UID when available. */
+  folder: string | null
+  /** Normalized display state, such as `active` or `paused`. */
+  state: string | null
+  /** Deep link to the alert rule or dashboard. */
+  href: string | null
+}
+
+/**
+ * Represents Grafana-backed reliability insights for the admin console.
+ */
+export interface AdminReliabilityInsights {
+  /** Whether the server has enough Grafana configuration to query live data. */
+  configured: boolean
+  /** Stable source identifier. */
+  source: 'grafana'
+  /** Optional deep link to the richer Grafana dashboard. */
+  dashboardUrl: string | null
+  /** Reliability summary metrics. */
+  metrics: AdminInsightMetric[]
+  /** Detailed rule rollups grouped by reliability question. */
+  breakdowns: AdminInsightBreakdown[]
+  /** Recent or important alert rules returned by Grafana. */
+  alertRules: AdminReliabilityAlertRule[]
+  /** ISO timestamp for when the server generated this response. */
+  updatedAt: string
+  /** Non-fatal query error when the integration is configured but unavailable. */
+  errorMessage: string | null
+}
+
+/**
+ * Represents the operational blast radius of an admin action.
+ */
+export type AdminAuditLogRisk = 'low' | 'medium' | 'high' | 'critical'
+
+/**
+ * Represents the final execution state of an audited admin action.
+ */
+export type AdminAuditLogStatus = 'success' | 'failed' | 'pending'
+
+/**
+ * Represents one durable operator action written by the admin API.
+ */
+export interface AdminAuditLogEntry {
+  /** Stable audit event identifier. */
+  id: string
+  /** User who triggered the action; null when the actor was a system task. */
+  actor: Pick<AdminUser, 'id' | 'name' | 'email'> | null
+  /** Machine-readable action name, such as `flux.grant.bulk`. */
+  action: string
+  /** Target domain type, such as `user`, `router_config`, or `voice_pack`. */
+  targetType: string
+  /** Target object identifier when the action references one object. */
+  targetId: string | null
+  /** Human-readable target label for table display. */
+  targetLabel: string | null
+  /** Risk tier used for filtering and visual warnings. */
+  risk: AdminAuditLogRisk
+  /** Execution status of the audited action. */
+  status: AdminAuditLogStatus
+  /** Short operator-facing description of what happened. */
+  summary: string
+  /** API-owned structured details for drill-down views. */
+  metadata: unknown
+  /** ISO timestamp for when the action was created. */
+  createdAt: string
+}
+
+/**
+ * Represents a paginated audit log response from the admin API.
+ */
+export interface AdminAuditLogsPage {
+  /** Audit entries for the current page. */
+  logs: AdminAuditLogEntry[]
+  /** Whether another page exists after this response. */
+  hasMore: boolean
+  /** Offset to request for the next page. */
+  nextOffset: number | null
+  /** Total matching audit entries. */
+  total: number
+}
+
+/**
+ * Represents the normalized status vocabulary for service health checks.
+ */
+export type AdminHealthStatus = 'operational' | 'degraded' | 'down' | 'unknown'
+
+/**
+ * Represents one backend dependency or service health check.
+ */
+export interface AdminHealthCheck {
+  /** Stable check identifier. */
+  id: string
+  /** Human-readable service label. */
+  label: string
+  /** Current service status. */
+  status: AdminHealthStatus
+  /** Operator-facing detail or last error summary. */
+  detail: string
+  /** ISO timestamp of the last check, or null when unavailable. */
+  checkedAt: string | null
+  /** Last observed latency in milliseconds, or null when not measured. */
+  latencyMs: number | null
+}
+
+/**
+ * Represents the full operational health payload for the admin console.
+ */
+export interface AdminHealthReport {
+  /** Aggregated status across checks and incidents. */
+  status: AdminHealthStatus
+  /** ISO timestamp for when the report was generated. */
+  checkedAt: string
+  /** Dependency and subsystem health checks. */
+  checks: AdminHealthCheck[]
+  /** Open or recent incidents surfaced to operators. */
+  incidents: Array<{
+    id: string
+    title: string
+    severity: AdminAuditLogRisk
+    status: 'open' | 'monitoring' | 'resolved'
+    startedAt: string
+    summary: string
+  }>
 }
 
 export interface FluxTransaction {
@@ -145,6 +371,42 @@ export interface AdminRouterConfigCurrent {
   missingKeys: string[]
 }
 
+/**
+ * Represents a persisted LLM router configuration version.
+ */
+export interface AdminRouterConfigHistoryEntry {
+  /** Stable version identifier used by rollback endpoints. */
+  id: string
+  /** Monotonic display version assigned by the API. */
+  version: number
+  /** Admin user who applied this version. */
+  actor: Pick<AdminUser, 'id' | 'name' | 'email'> | null
+  /** Short description of the version change. */
+  summary: string
+  /** Original request payload used to produce this version. */
+  request: AdminRouterConfigRequest
+  /** Rendered router preview after this version was applied. */
+  preview: Record<string, unknown>
+  /** ISO timestamp for when the version was applied. */
+  createdAt: string
+  /** Whether the API currently allows rollback to this version. */
+  rollbackable: boolean
+}
+
+/**
+ * Represents a paginated router configuration history response.
+ */
+export interface AdminRouterConfigHistoryPage {
+  /** Router config versions for the current page. */
+  versions: AdminRouterConfigHistoryEntry[]
+  /** Whether another page exists after this response. */
+  hasMore: boolean
+  /** Offset to request for the next page. */
+  nextOffset: number | null
+  /** Total matching versions. */
+  total: number
+}
+
 export interface VoicePackParams {
   [key: string]: string | number | boolean | null
 }
@@ -246,12 +508,41 @@ export function signInUrl(): string {
 
 async function adminFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const endpoint = new URL(`/api/admin${path}`, apiServerUrl())
-  return fetchJson<T>(endpoint, init)
+  return fetchJson<T>(endpoint, withDevelopmentAuth(init))
 }
 
 async function publicFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const endpoint = new URL(`/api/v1${path}`, apiServerUrl())
   return fetchJson<T>(endpoint, init)
+}
+
+/**
+ * Reads the local-only admin bearer token for Vite development previews.
+ */
+export function developmentAdminBearerToken(): string | null {
+  if (!import.meta.env.DEV)
+    return null
+
+  const token = import.meta.env.VITE_ADMIN_TEST_AUTH_TOKEN
+  return typeof token === 'string' && token.trim() ? token.trim() : null
+}
+
+/**
+ * Adds the local test auth header without changing production admin requests.
+ */
+export function withDevelopmentAuth(init: RequestInit = {}): RequestInit {
+  const token = developmentAdminBearerToken()
+  if (!token)
+    return init
+
+  const headers = new Headers(init.headers)
+  if (!headers.has('Authorization'))
+    headers.set('Authorization', `Bearer ${token}`)
+
+  return {
+    ...init,
+    headers,
+  }
 }
 
 async function fetchJson<T>(endpoint: URL, init: RequestInit = {}): Promise<T> {
@@ -315,6 +606,28 @@ async function publicFetchBlob(path: string, init: RequestInit = {}): Promise<Bl
   return await response.blob()
 }
 
+/**
+ * Builds a query suffix from optional scalar parameters.
+ *
+ * Use when:
+ * - Admin API methods expose list filters.
+ * - Empty filter values should be omitted from the request URL.
+ *
+ * Expects:
+ * - `params` contains only scalar values accepted by URLSearchParams.
+ *
+ * Returns:
+ * - A `?key=value` suffix, or an empty string when no values are present.
+ */
+export function buildAdminQuerySuffix(params: Record<string, number | string | null | undefined>): string {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value != null && value !== '')
+      query.set(key, String(value))
+  }
+  return query.toString() ? `?${query.toString()}` : ''
+}
+
 function extractErrorMessage(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object')
     return null
@@ -327,23 +640,20 @@ function extractErrorMessage(payload: unknown): string | null {
 }
 
 export const adminApi = {
-  me: () => adminFetch<AdminMe>('/me'),
-  metrics: () => adminFetch<AdminMetrics>('/metrics'),
+  me: () => shouldUseMockAdminApi() ? mockAdminMe() : adminFetch<AdminMe>('/me'),
+  metrics: () => shouldUseMockAdminApi() ? mockAdminMetrics() : adminFetch<AdminMetrics>('/metrics'),
+  productInsights: () => shouldUseMockAdminApi() ? mockAdminProductInsights() : adminFetch<AdminProductInsights>('/insights/product'),
+  reliabilityInsights: () => shouldUseMockAdminApi() ? mockAdminReliabilityInsights() : adminFetch<AdminReliabilityInsights>('/insights/reliability'),
+  health: () => shouldUseMockAdminApi() ? mockAdminHealth() : adminFetch<AdminHealthReport>('/health'),
+  auditLogs: (params: { action?: string, limit?: number, offset?: number, risk?: string, status?: string }) => {
+    if (shouldUseMockAdminApi())
+      return mockAdminAuditLogs()
+
+    const suffix = buildAdminQuerySuffix(params)
+    return adminFetch<AdminAuditLogsPage>(`/audit-logs${suffix}`)
+  },
   users: (params: { query?: string, limit?: number, offset?: number, sortDirection?: string, sortKey?: string, status?: string }) => {
-    const query = new URLSearchParams()
-    if (params.query)
-      query.set('query', params.query)
-    if (params.limit != null)
-      query.set('limit', String(params.limit))
-    if (params.offset != null)
-      query.set('offset', String(params.offset))
-    if (params.sortDirection)
-      query.set('sortDirection', params.sortDirection)
-    if (params.sortKey)
-      query.set('sortKey', params.sortKey)
-    if (params.status)
-      query.set('status', params.status)
-    const suffix = query.toString() ? `?${query.toString()}` : ''
+    const suffix = buildAdminQuerySuffix(params)
     return adminFetch<AdminUsersPage>(`/users${suffix}`)
   },
   user: (id: string) => adminFetch<{ user: AdminUser, recentFluxTransactions: FluxTransaction[] }>(`/users/${encodeURIComponent(id)}`),
@@ -373,6 +683,14 @@ export const adminApi = {
       body: JSON.stringify({ ...body, dryRun }),
     }),
   routerConfig: () => adminFetch<AdminRouterConfigCurrent>('/config/router'),
+  routerConfigHistory: (params: { limit?: number, offset?: number } = {}) => {
+    const suffix = buildAdminQuerySuffix(params)
+    return adminFetch<AdminRouterConfigHistoryPage>(`/config/router/history${suffix}`)
+  },
+  rollbackRouterConfig: (versionId: string) =>
+    adminFetch<AdminRouterConfigResult>(`/config/router/history/${encodeURIComponent(versionId)}/rollback`, {
+      method: 'POST',
+    }),
   speechModels: async () => {
     const data = await publicFetch<{ models?: SpeechModel[] }>('/audio/models')
     return Array.isArray(data.models) ? data.models : []

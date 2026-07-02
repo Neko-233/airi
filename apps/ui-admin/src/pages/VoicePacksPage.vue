@@ -7,6 +7,7 @@ import { computed, onMounted, shallowRef } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
+import { formatAdminDate, t } from '../modules/admin-locale'
 import { adminApi } from '../modules/api'
 
 const router = useRouter()
@@ -27,7 +28,7 @@ async function loadPacks() {
     packs.value = await adminApi.voicePacks()
   }
   catch (error) {
-    toast.error(errorMessageFromUnknown(error, 'Failed to load Voice Packs'))
+    toast.error(errorMessageFromUnknown(error, t('voice.failedLoad')))
   }
   finally {
     loading.value = false
@@ -35,7 +36,7 @@ async function loadPacks() {
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value))
+  return formatAdminDate(value)
 }
 
 function formatMultiplier(value: number): string {
@@ -52,41 +53,41 @@ function editPack(pack: VoicePack) {
     <div :class="['flex', 'flex-col', 'gap-3', 'border-b', 'border-neutral-200', 'px-5', 'py-4', 'md:flex-row', 'md:items-center', 'md:justify-between']">
       <div>
         <h2 :class="['text-sm', 'font-semibold']">
-          Voice Packs
+          {{ t('voice.title') }}
         </h2>
         <p :class="['mt-1', 'text-sm', 'text-neutral-500']">
-          Curated speech presets exposed to users for character-card binding.
+          {{ t('voice.description') }}
         </p>
       </div>
       <div :class="['flex', 'flex-wrap', 'items-center', 'gap-2']">
         <span :class="['badge', 'badge-green']">
           <span :class="['i-lucide-volume-2']" />
-          {{ enabledCount }} enabled
+          {{ t('voice.enabledCount', { count: enabledCount }) }}
         </span>
         <span :class="['badge', disabledCount > 0 ? 'badge-amber' : 'badge-green']">
           <span :class="['i-lucide-circle-slash']" />
-          {{ disabledCount }} disabled
+          {{ t('voice.disabledCount', { count: disabledCount }) }}
         </span>
         <RouterLink to="/voice-packs/new">
-          <Button icon="i-lucide-plus" label="New" size="sm" variant="secondary" />
+          <Button icon="i-lucide-plus" :label="t('action.new')" size="sm" variant="secondary" />
         </RouterLink>
       </div>
     </div>
 
     <div v-if="loading && packs.length === 0" :class="['empty-state']">
       <span :class="['i-lucide-loader-2', 'animate-spin', 'text-2xl']" />
-      Loading Voice Packs
+      {{ t('voice.loading') }}
     </div>
 
     <table v-else-if="packs.length > 0" :class="['table']">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Routing</th>
-          <th>Voice</th>
-          <th>Cost</th>
-          <th>Status</th>
-          <th>Updated</th>
+          <th>{{ t('voice.name') }}</th>
+          <th>{{ t('voice.routing') }}</th>
+          <th>{{ t('voice.voice') }}</th>
+          <th>{{ t('voice.cost') }}</th>
+          <th>{{ t('voice.status') }}</th>
+          <th>{{ t('voice.updated') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -104,7 +105,7 @@ function editPack(pack: VoicePack) {
               {{ pack.name }}
             </div>
             <div :class="['mt-1', 'max-w-[280px]', 'truncate', 'text-xs', 'text-neutral-500']">
-              {{ pack.description || 'No description' }}
+              {{ pack.description || t('voice.noDescription') }}
             </div>
           </td>
           <td>
@@ -122,7 +123,7 @@ function editPack(pack: VoicePack) {
           <td>
             <span :class="['badge', pack.enabled ? 'badge-green' : 'badge-amber']">
               <span :class="[pack.enabled ? 'i-lucide-check-circle-2' : 'i-lucide-pause-circle']" />
-              {{ pack.enabled ? 'Enabled' : 'Disabled' }}
+              {{ pack.enabled ? t('voice.enabled') : t('voice.disabled') }}
             </span>
           </td>
           <td>{{ formatDate(pack.updatedAt) }}</td>
@@ -132,9 +133,9 @@ function editPack(pack: VoicePack) {
 
     <div v-else :class="['empty-state']">
       <span :class="['i-lucide-volume-x', 'text-2xl']" />
-      No Voice Packs configured
+      {{ t('voice.noPacks') }}
       <RouterLink to="/voice-packs/new">
-        <Button icon="i-lucide-plus" label="Create Voice Pack" size="sm" variant="secondary" />
+        <Button icon="i-lucide-plus" :label="t('action.createVoicePack')" size="sm" variant="secondary" />
       </RouterLink>
     </div>
   </section>

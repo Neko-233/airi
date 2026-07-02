@@ -428,6 +428,7 @@ export async function buildApp(deps: AppDeps) {
       db: deps.db,
       billingService: deps.billingService,
       configKV: deps.configKV,
+      env: deps.env,
     }))
 
     /**

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { AdminRouterConfigCurrent, AdminRouterConfigRequest, AdminRouterConfigResult } from '../modules/api'
+import type { AdminRouterConfigCurrent, AdminRouterConfigHistoryEntry, AdminRouterConfigRequest, AdminRouterConfigResult } from '../modules/api'
 import type { RouterSliceDraft, RouterSliceKind } from '../modules/router-config-form'
 
 import { errorMessageFromUnknown } from '@proj-airi/stage-shared'
-import { Button, Callout, FieldSelect } from '@proj-airi/ui'
+import { Button, Callout, DoubleCheckButton, FieldSelect } from '@proj-airi/ui'
 import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { toast } from 'vue-sonner'
 
@@ -13,7 +13,7 @@ import RouterModeControl from '../components/llm-router/RouterModeControl.vue'
 import RouterPreviewPanel from '../components/llm-router/RouterPreviewPanel.vue'
 import RouterSliceEditor from '../components/llm-router/RouterSliceEditor.vue'
 
-import { adminApi } from '../modules/api'
+import { adminApi, AdminApiError } from '../modules/api'
 import {
   buildRouterConfigRequest,
   createRouterConfigFormState,
@@ -42,6 +42,10 @@ const busy = shallowRef<BusyState | null>(null)
 const currentConfig = shallowRef<AdminRouterConfigCurrent | null>(null)
 const loadingCurrent = shallowRef(false)
 const currentError = shallowRef<string | null>(null)
+const history = shallowRef<AdminRouterConfigHistoryEntry[]>([])
+const loadingHistory = shallowRef(false)
+const historyUnavailable = shallowRef(false)
+const rollbackBusyId = shallowRef<string | null>(null)
 const advancedJson = shallowRef(formatRouterConfigRequestJson(routerConfigRequestFromFormDraft(form)))
 const advancedError = shallowRef<string | null>(null)
 
@@ -103,9 +107,11 @@ const currentStatusLabel = computed(() => {
     return 'Loaded current config'
   return 'No current config'
 })
+const changeSummary = computed(() => summarizeRouterChanges(currentConfig.value?.request ?? null, pendingRequest.value))
 
 onMounted(() => {
   void loadCurrentConfig()
+  void loadRouterHistory()
 })
 
 async function previewConfig() {
@@ -149,6 +155,30 @@ async function loadCurrentConfig() {
   }
   finally {
     loadingCurrent.value = false
+  }
+}
+
+/**
+ * Loads recent router configuration versions when the API supports history.
+ */
+async function loadRouterHistory() {
+  loadingHistory.value = true
+  historyUnavailable.value = false
+  try {
+    const result = await adminApi.routerConfigHistory({ limit: 5, offset: 0 })
+    history.value = result.versions
+  }
+  catch (error) {
+    history.value = []
+    if (error instanceof AdminApiError && error.status === 404) {
+      historyUnavailable.value = true
+      return
+    }
+
+    toast.error(errorMessageFromUnknown(error, 'Failed to load router history'))
+  }
+  finally {
+    loadingHistory.value = false
   }
 }
 
@@ -223,6 +253,7 @@ async function submitRequest(request: AdminRouterConfigRequest, dryRun: boolean,
 
     applyResult.value = result
     previewResult.value = result
+    void loadRouterHistory()
     toast.success('Router config applied')
   }
   catch (error) {
@@ -230,6 +261,27 @@ async function submitRequest(request: AdminRouterConfigRequest, dryRun: boolean,
   }
   finally {
     busy.value = null
+  }
+}
+
+/**
+ * Rolls back to a previously applied router configuration version.
+ */
+async function rollbackConfig(version: AdminRouterConfigHistoryEntry) {
+  rollbackBusyId.value = version.id
+  try {
+    const result = await adminApi.rollbackRouterConfig(version.id)
+    applyResult.value = result
+    previewResult.value = result
+    toast.success(`Router config rolled back to v${version.version}`)
+    await loadCurrentConfig()
+    await loadRouterHistory()
+  }
+  catch (error) {
+    toast.error(errorMessageFromUnknown(error, 'Failed to roll back router config'))
+  }
+  finally {
+    rollbackBusyId.value = null
   }
 }
 
@@ -246,6 +298,48 @@ function parseAdvancedJsonRequest(): AdminRouterConfigRequest | null {
     advancedError.value = errorMessageFromUnknown(error, 'Invalid advanced JSON')
     return null
   }
+}
+
+/**
+ * Summarizes pending router changes without exposing provider secrets.
+ */
+function summarizeRouterChanges(current: AdminRouterConfigRequest | null, pending: AdminRouterConfigRequest): string[] {
+  if (!current)
+    return ['Current config is not loaded, so diff is unavailable.']
+
+  const changes: string[] = []
+  if ((current.mode ?? 'merge') !== (pending.mode ?? 'merge'))
+    changes.push(`Mode changes from ${current.mode ?? 'merge'} to ${pending.mode ?? 'merge'}.`)
+
+  const currentSlices = current.slices ?? []
+  const pendingSlices = pending.slices ?? []
+  if (currentSlices.length !== pendingSlices.length)
+    changes.push(`Slices change from ${currentSlices.length} to ${pendingSlices.length}.`)
+
+  const currentDefaults = JSON.stringify(current.defaults ?? {})
+  const pendingDefaults = JSON.stringify(pending.defaults ?? {})
+  if (currentDefaults !== pendingDefaults)
+    changes.push('Default model aliases changed.')
+
+  const currentKinds = currentSlices.map(slice => slice.kind).sort().join(',')
+  const pendingKinds = pendingSlices.map(slice => slice.kind).sort().join(',')
+  if (currentKinds !== pendingKinds)
+    changes.push('Provider kind mix changed.')
+
+  if (JSON.stringify(current) !== JSON.stringify(pending) && changes.length === 0)
+    changes.push('Provider settings changed.')
+
+  return changes.length > 0 ? changes : ['No pending changes detected.']
+}
+
+/**
+ * Formats router history timestamps for compact rows.
+ */
+function formatHistoryTime(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
 }
 
 function isLlmSlice(slice: RouterSliceDraft) {
@@ -472,21 +566,114 @@ function isCurrentConfigResponse(value: AdminRouterConfigCurrent | null): value 
               :loading="busy === 'preview'"
               @click="previewConfig"
             />
-            <Button
-              icon="i-lucide-save"
-              label="Apply"
+            <DoubleCheckButton
               size="sm"
-              type="button"
+              variant="caution"
               :disabled="busy != null || hasValidationErrors"
               :loading="busy === 'apply'"
-              @click="applyConfig"
-            />
+              @confirm="applyConfig"
+            >
+              <span :class="['inline-flex', 'items-center', 'gap-2']">
+                <span :class="['i-lucide-save']" />
+                Apply
+              </span>
+              <template #confirm>
+                Confirm Apply
+              </template>
+            </DoubleCheckButton>
           </div>
         </div>
       </form>
     </section>
 
     <aside :class="['space-y-4']">
+      <section :class="['panel', 'overflow-hidden']">
+        <div :class="['panel-toolbar']">
+          <div>
+            <h3 :class="['panel-title']">
+              Change Review
+            </h3>
+            <p :class="['panel-description']">
+              Current config compared with the pending form state.
+            </p>
+          </div>
+        </div>
+        <div :class="['space-y-2', 'p-4']">
+          <div
+            v-for="change in changeSummary"
+            :key="change"
+            :class="['flex', 'items-start', 'gap-2', 'rounded-lg', 'border', 'border-neutral-200', 'bg-neutral-50', 'p-3', 'text-sm', 'text-neutral-700', 'dark:border-neutral-800', 'dark:bg-neutral-950', 'dark:text-neutral-300']"
+          >
+            <span :class="[change === 'No pending changes detected.' ? 'i-lucide-check-circle-2 text-emerald-600' : 'i-lucide-git-compare-arrows text-amber-600', 'mt-0.5']" />
+            <span>{{ change }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section :class="['panel', 'overflow-hidden']">
+        <div :class="['panel-toolbar']">
+          <div>
+            <h3 :class="['panel-title']">
+              Version History
+            </h3>
+            <p :class="['panel-description']">
+              Roll back to a recently applied router config when the API supports it.
+            </p>
+          </div>
+          <button :class="['btn', 'btn-secondary']" type="button" :disabled="loadingHistory" @click="loadRouterHistory">
+            <span :class="['i-lucide-refresh-cw', loadingHistory ? 'animate-spin' : '']" />
+          </button>
+        </div>
+
+        <div v-if="loadingHistory && history.length === 0" :class="['empty-state']">
+          <span :class="['i-lucide-loader-2', 'animate-spin', 'text-2xl']" />
+          Loading history
+        </div>
+
+        <div v-else-if="historyUnavailable" :class="['empty-state']">
+          <span :class="['i-lucide-history', 'text-2xl']" />
+          Router history API is not configured yet
+        </div>
+
+        <div v-else-if="history.length === 0" :class="['empty-state']">
+          <span :class="['i-lucide-history', 'text-2xl']" />
+          No router versions recorded
+        </div>
+
+        <div v-else :class="['divide-y', 'divide-neutral-200', 'dark:divide-neutral-800']">
+          <article v-for="version in history" :key="version.id" :class="['space-y-3', 'p-4']">
+            <div :class="['flex', 'items-start', 'justify-between', 'gap-3']">
+              <div :class="['min-w-0']">
+                <div :class="['text-sm', 'font-semibold']">
+                  v{{ version.version }} - {{ version.summary }}
+                </div>
+                <div :class="['mt-1', 'text-xs', 'text-neutral-500', 'dark:text-neutral-400']">
+                  {{ version.actor?.email ?? 'System' }} - {{ formatHistoryTime(version.createdAt) }}
+                </div>
+              </div>
+              <span :class="['badge', version.rollbackable ? 'badge-blue' : 'badge-amber']">
+                {{ version.rollbackable ? 'Rollbackable' : 'Locked' }}
+              </span>
+            </div>
+            <DoubleCheckButton
+              size="sm"
+              variant="caution"
+              :disabled="!version.rollbackable || rollbackBusyId != null"
+              :loading="rollbackBusyId === version.id"
+              @confirm="rollbackConfig(version)"
+            >
+              <span :class="['inline-flex', 'items-center', 'gap-2']">
+                <span :class="['i-lucide-rotate-ccw']" />
+                Rollback
+              </span>
+              <template #confirm>
+                Confirm Rollback
+              </template>
+            </DoubleCheckButton>
+          </article>
+        </div>
+      </section>
+
       <RouterPreviewPanel title="Preview" :result="previewResult" />
       <RouterPreviewPanel title="Last Apply" :result="applyResult" />
       <RouterAdvancedJsonPanel

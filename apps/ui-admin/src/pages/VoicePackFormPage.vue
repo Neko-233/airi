@@ -2,7 +2,7 @@
 import type { SpeechVoice, VoicePack, VoicePackParams, VoicePackPayload } from '../modules/api'
 
 import { errorMessageFromUnknown } from '@proj-airi/stage-shared'
-import { Button, Callout, FieldInput, FieldSelect, FieldTextArea } from '@proj-airi/ui'
+import { Button, Callout, DoubleCheckButton, FieldInput, FieldSelect, FieldTextArea } from '@proj-airi/ui'
 import { computed, onBeforeUnmount, onMounted, reactive, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
@@ -601,16 +601,21 @@ function normalizeRateOption(value: string | number | boolean | null | undefined
 
         <div :class="['border-t', 'border-neutral-200', 'pt-4', 'xl:col-span-2']">
           <div :class="['flex', 'flex-wrap', 'justify-between', 'gap-2']">
-            <Button
+            <DoubleCheckButton
               v-if="isEditing && selectedPack?.enabled"
-              icon="i-lucide-ban"
-              label="Disable"
               size="sm"
-              type="button"
               variant="danger"
               :loading="saving"
-              @click="disablePack"
-            />
+              @confirm="disablePack"
+            >
+              <span :class="['inline-flex', 'items-center', 'gap-2']">
+                <span :class="['i-lucide-ban']" />
+                Disable
+              </span>
+              <template #confirm>
+                Confirm Disable
+              </template>
+            </DoubleCheckButton>
             <span v-else />
             <div :class="['flex', 'flex-wrap', 'gap-2']">
               <Button icon="i-lucide-x" label="Cancel" size="sm" type="button" variant="secondary" @click="router.push('/voice-packs')" />

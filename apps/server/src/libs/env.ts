@@ -189,6 +189,19 @@ const EnvSchema = object({
   // Empty (default) = no one is admin — production safe by default.
   // Example: ADMIN_EMAILS=alice@example.com,bob@example.com
   ADMIN_EMAILS: optional(string(), ''),
+
+  // Optional PostHog read-side integration for the admin operator console.
+  // Use a personal API key with `query:read`; never expose it to the browser.
+  POSTHOG_HOST: optional(string(), 'https://app.posthog.com'),
+  POSTHOG_PROJECT_ID: optional(string(), ''),
+  POSTHOG_PERSONAL_API_KEY: optional(string(), ''),
+  POSTHOG_DASHBOARD_URL: optional(string(), ''),
+
+  // Optional Grafana read-side integration for the admin operator console.
+  // Use a service account token with read-only dashboard / alerting access.
+  GRAFANA_URL: optional(string(), ''),
+  GRAFANA_SERVICE_ACCOUNT_TOKEN: optional(string(), ''),
+  GRAFANA_DASHBOARD_URL: optional(string(), ''),
 })
 
 export type Env = InferOutput<typeof EnvSchema>

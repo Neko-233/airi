@@ -1,146 +1,277 @@
 <script setup lang="ts">
-import type { AdminMetrics } from '../modules/api'
+import type { AdminAuditLogEntry, AdminHealthReport, AdminMetrics } from '../modules/api'
 
 import { errorMessageFromUnknown } from '@proj-airi/stage-shared'
+import { NButton } from 'naive-ui'
 import { computed, onMounted, shallowRef } from 'vue'
+import { RouterLink } from 'vue-router'
 import { toast } from 'vue-sonner'
 
-import { adminApi } from '../modules/api'
+import OverviewCommandRail from '../components/admin-dashboard/OverviewCommandRail.vue'
+import OverviewOperationsTable from '../components/admin-dashboard/OverviewOperationsTable.vue'
+import OverviewRiskTimeline from '../components/admin-dashboard/OverviewRiskTimeline.vue'
+import OverviewStatusStrip from '../components/admin-dashboard/OverviewStatusStrip.vue'
+
+import { formatAdminNumber, t } from '../modules/admin-locale'
+import { adminApi, AdminApiError } from '../modules/api'
 
 const loading = shallowRef(true)
 const metrics = shallowRef<AdminMetrics | null>(null)
+const health = shallowRef<AdminHealthReport | null>(null)
+const auditLogs = shallowRef<AdminAuditLogEntry[]>([])
+const healthUnavailable = shallowRef(false)
+const auditUnavailable = shallowRef(false)
 
-const cards = computed(() => {
+const statusItems = computed(() => {
   const data = metrics.value
   return [
     {
-      label: 'Total Users',
+      label: t('overview.totalUsers'),
       value: formatNumber(data?.totalUsers),
-      trend: `${formatNumber(data?.verifiedUsers)} verified`,
+      detail: t('overview.verified', { value: formatNumber(data?.verifiedUsers) }),
       icon: 'i-lucide-users',
     },
     {
-      label: 'Active Sessions',
+      label: t('overview.activeSessions'),
       value: formatNumber(data?.activeSessions),
-      trend: 'Better Auth session rows',
+      detail: t('overview.betterAuthRows'),
       icon: 'i-lucide-activity',
     },
     {
-      label: 'Current Flux',
+      label: t('overview.currentFlux'),
       value: formatNumber(data?.currentFlux),
-      trend: `${formatNumber(data?.issuedFlux)} issued lifetime`,
+      detail: t('overview.issuedLifetime', { value: formatNumber(data?.issuedFlux) }),
       icon: 'i-lucide-coins',
     },
     {
-      label: 'LLM 24h',
+      label: t('overview.llm24h'),
       value: formatNumber(data?.llmRequests24h),
-      trend: `${formatNumber(data?.llmFlux24h)} Flux consumed`,
+      detail: t('overview.fluxConsumed', { value: formatNumber(data?.llmFlux24h) }),
       icon: 'i-lucide-bot',
     },
   ]
 })
+const healthChecks = computed(() => health.value?.checks ?? [])
+const degradedChecks = computed(() => healthChecks.value.filter(check => check.status === 'degraded' || check.status === 'down'))
+const healthRows = computed(() => [
+  ...degradedChecks.value,
+  ...healthChecks.value.filter(check => check.status !== 'degraded' && check.status !== 'down'),
+].slice(0, 6))
+const criticalAuditLogs = computed(() => auditLogs.value.filter(log => log.risk === 'critical' || log.risk === 'high').slice(0, 5))
+const commandLinks = computed(() => [
+  {
+    to: '/flux',
+    icon: 'i-lucide-coins',
+    tone: 'text-emerald-600',
+    title: t('overview.fluxGrants'),
+    description: t('overview.fluxGrantsDescription'),
+  },
+  {
+    to: '/llm-router',
+    icon: 'i-lucide-route',
+    tone: 'text-sky-600',
+    title: t('overview.llmRouter'),
+    description: t('overview.llmRouterDescription'),
+  },
+  {
+    to: '/voice-packs',
+    icon: 'i-lucide-volume-2',
+    tone: 'text-amber-600',
+    title: t('overview.voicePacks'),
+    description: t('overview.voicePacksDescription'),
+  },
+  {
+    to: '/insights',
+    icon: 'i-lucide-chart-no-axes-combined',
+    tone: 'text-indigo-600',
+    title: t('overview.insights'),
+    description: t('overview.insightsDescription'),
+  },
+  {
+    to: '/users',
+    icon: 'i-lucide-users',
+    tone: 'text-neutral-700 dark:text-neutral-200',
+    title: t('overview.userSupport'),
+    description: t('overview.userSupportDescription'),
+  },
+])
 
 onMounted(async () => {
+  await Promise.all([
+    loadMetrics(),
+    loadHealthSummary(),
+    loadAuditSummary(),
+  ])
+  loading.value = false
+})
+
+/**
+ * Loads the primary dashboard metrics.
+ */
+async function loadMetrics() {
   try {
     metrics.value = await adminApi.metrics()
   }
   catch (error) {
-    toast.error(errorMessageFromUnknown(error, 'Failed to load metrics'))
+    toast.error(errorMessageFromUnknown(error, '加载总览指标失败'))
   }
-  finally {
-    loading.value = false
-  }
-})
+}
 
+/**
+ * Loads optional health data for the operations summary.
+ */
+async function loadHealthSummary() {
+  try {
+    health.value = await adminApi.health()
+    healthUnavailable.value = false
+  }
+  catch (error) {
+    health.value = null
+    healthUnavailable.value = error instanceof AdminApiError && error.status === 404
+    if (!healthUnavailable.value)
+      toast.error(errorMessageFromUnknown(error, '加载健康摘要失败'))
+  }
+}
+
+/**
+ * Loads optional audit data for the recent actions panel.
+ */
+async function loadAuditSummary() {
+  try {
+    const result = await adminApi.auditLogs({ limit: 6, offset: 0 })
+    auditLogs.value = result.logs
+    auditUnavailable.value = false
+  }
+  catch (error) {
+    auditLogs.value = []
+    auditUnavailable.value = error instanceof AdminApiError && error.status === 404
+    if (!auditUnavailable.value)
+      toast.error(errorMessageFromUnknown(error, '加载最近审计事件失败'))
+  }
+}
+
+/**
+ * Formats a number for dashboard counters.
+ */
 function formatNumber(value: number | null | undefined): string {
   if (value == null)
     return loading.value ? '...' : '0'
-  return new Intl.NumberFormat().format(value)
+  return formatAdminNumber(value)
 }
 </script>
 
 <template>
-  <div class="space-y-5">
-    <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <article v-for="card in cards" :key="card.label" class="metric-card">
-        <div class="flex items-start justify-between">
-          <div class="text-sm text-neutral-500">
-            {{ card.label }}
-          </div>
-          <div class="h-8 w-8 flex items-center justify-center border border-neutral-200 rounded-md bg-white text-neutral-600">
-            <span :class="card.icon" />
-          </div>
-        </div>
-        <div class="mt-3 text-3xl font-semibold tracking-tight">
-          {{ card.value }}
-        </div>
-        <div class="mt-5 flex items-center gap-2 text-sm text-neutral-600">
-          <span class="i-lucide-trending-up text-emerald-600" />
-          {{ card.trend }}
-        </div>
-      </article>
-    </section>
-
-    <section class="panel overflow-hidden">
-      <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 class="text-sm font-semibold">
-            Operational Overview
-          </h2>
-          <p class="mt-1 text-sm text-neutral-500">
-            Reserved surface for Grafana panels and live gateway indicators.
-          </p>
-        </div>
-        <button class="btn btn-secondary" type="button">
-          <span class="i-lucide-panel-top" />
-          Grafana Embed
-        </button>
+  <div class="overview-console">
+    <section class="overview-console-header">
+      <div class="overview-console-copy">
+        <p>{{ t('overview.operationsCommand') }}</p>
+        <h2>{{ t('overview.adminOverview') }}</h2>
+        <span>{{ t('overview.monitorDescription') }}</span>
       </div>
-
-      <div class="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <div v-if="metrics?.grafanaEmbedUrl" class="min-h-[340px] overflow-hidden border border-neutral-200 rounded-lg">
-          <iframe class="h-full min-h-[340px] w-full" :src="metrics.grafanaEmbedUrl" />
-        </div>
-        <div v-else class="relative min-h-[340px] overflow-hidden border border-neutral-200 rounded-lg from-white to-emerald-50/60 bg-gradient-to-b px-5 py-5">
-          <div class="absolute inset-x-5 bottom-10 top-8 flex items-end gap-2">
-            <div v-for="height in [32, 46, 38, 72, 54, 88, 50, 64, 80, 44, 70, 92, 60, 74, 56, 84, 68, 96]" :key="height" class="flex-1 rounded-t bg-emerald-500/35" :style="{ height: `${height}%` }" />
-          </div>
-          <div class="relative z-1 flex items-center justify-between">
-            <div>
-              <div class="text-sm font-semibold">
-                Grafana placeholder
-              </div>
-              <div class="mt-1 text-sm text-neutral-500">
-                Add an embed URL later without changing the page shell.
-              </div>
-            </div>
-            <span class="badge badge-green">
-              <span class="i-lucide-circle" />
-              Ready
-            </span>
-          </div>
-        </div>
-
-        <div class="space-y-3">
-          <div class="border border-neutral-200 rounded-lg bg-white p-4">
-            <div class="text-xs text-neutral-500 font-semibold uppercase">
-              Admin Seats
-            </div>
-            <div class="mt-2 text-2xl font-semibold">
-              {{ formatNumber(metrics?.adminSeats) }}
-            </div>
-          </div>
-          <div class="border border-neutral-200 rounded-lg bg-white p-4">
-            <div class="text-xs text-neutral-500 font-semibold uppercase">
-              Router Config
-            </div>
-            <RouterLink class="mt-2 inline-flex items-center gap-2 text-sm text-emerald-700 font-semibold" to="/llm-router">
-              Open Router Config
-              <span class="i-lucide-arrow-right" />
-            </RouterLink>
-          </div>
-        </div>
+      <div class="overview-console-actions">
+        <RouterLink v-slot="{ navigate }" custom to="/audit-log">
+          <NButton secondary @click="navigate">
+            <template #icon>
+              <span class="i-lucide-file-clock" />
+            </template>
+            {{ t('action.auditLog') }}
+          </NButton>
+        </RouterLink>
+        <RouterLink v-slot="{ navigate }" custom to="/health">
+          <NButton type="primary" @click="navigate">
+            <template #icon>
+              <span class="i-lucide-heart-pulse" />
+            </template>
+            {{ t('action.health') }}
+          </NButton>
+        </RouterLink>
       </div>
     </section>
+
+    <OverviewStatusStrip :items="statusItems" />
+
+    <section class="overview-console-workbench">
+      <OverviewOperationsTable
+        :degraded-count="degradedChecks.length"
+        :health="health"
+        :rows="healthRows"
+        :unavailable="healthUnavailable"
+      />
+      <OverviewRiskTimeline
+        :logs="criticalAuditLogs"
+        :unavailable="auditUnavailable"
+      />
+    </section>
+
+    <OverviewCommandRail :links="commandLinks" />
   </div>
 </template>
+
+<style scoped>
+.overview-console {
+  display: grid;
+  gap: 14px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.overview-console-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--admin-border);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding-bottom: 14px;
+}
+
+.overview-console-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.overview-console-copy p {
+  color: var(--admin-accent);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.overview-console-copy h2 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.overview-console-copy span {
+  color: var(--admin-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 760px;
+}
+
+.overview-console-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.overview-console-workbench {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  min-height: 0;
+}
+
+@media (max-width: 1180px) {
+  .overview-console {
+    height: auto;
+  }
+
+  .overview-console-workbench {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
