@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   generate:
+    if: ${{ github.repository == 'moeru-ai/airi' }}
     runs-on: ubuntu-latest
     env:
       SPONSORKIT_PATREON_TOKEN: ${{ secrets.SPONSORKIT_PATREON_TOKEN }}
