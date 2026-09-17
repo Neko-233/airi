@@ -16,3 +16,8 @@ export function isFluxPurchaseDisabled(): boolean {
 export function isCustomProvidersDisabled(): boolean {
   return isEnvTruthy(import.meta.env.VITE_DISABLE_CUSTOM_PROVIDERS)
 }
+
+/** Steam ships only managed AI services; saved settings cannot enable external services. */
+export function isSteamDistribution(): boolean {
+  return import.meta.env.VITE_DISTRIBUTION === 'steam'
+}

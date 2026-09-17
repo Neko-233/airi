@@ -5,6 +5,7 @@ import Tres from '@tresjs/core'
 
 import { autoAnimatePlugin } from '@formkit/auto-animate/vue'
 import { PiniaColada } from '@pinia/colada'
+import { isSteamDistribution } from '@proj-airi/stage-shared'
 import { trackButtonPlugin } from '@proj-airi/stage-ui/directives/track-button'
 import { browserAuthorizationHandler, registerAuthorizationHandler } from '@proj-airi/stage-ui/libs/auth'
 import { piniaPluginTracing, setupSynced } from '@proj-airi/stage-ui/libs/pinia'
@@ -59,6 +60,19 @@ const router = createRouter({
   history: createWebHashHistory(),
   // TODO: vite-plugin-vue-layouts is long deprecated, replace with another layout solution
   routes: setupLayouts(routes as RouteRecordRaw[]),
+})
+
+// Hidden settings must also reject saved deep links in the Steam distribution.
+router.beforeEach((to) => {
+  if (!isSteamDistribution())
+    return
+
+  if (/^\/settings\/modules\/(?:artistry|web-search)(?:\/|$)/.test(to.path))
+    return '/settings/modules'
+
+  const providerRoute = /^\/settings\/providers\/[^/]+\/([^/]+)/.exec(to.path)
+  if (providerRoute && !['official-provider', 'official-provider-speech', 'official-provider-speech-streaming', 'official-provider-transcription', 'speech-noop'].includes(providerRoute[1]))
+    return '/settings/providers'
 })
 
 if (import.meta.hot) {

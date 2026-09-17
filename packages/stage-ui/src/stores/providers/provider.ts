@@ -6,7 +6,7 @@ import type { ChatRequestOptions, ModelInfo, ProviderDefinition, ProviderInstanc
 
 import { errorMessageFrom } from '@moeru/std'
 import { getGenerationProvider } from '@proj-airi/provider-inference'
-import { isCustomProvidersDisabled } from '@proj-airi/stage-shared'
+import { isCustomProvidersDisabled, isSteamDistribution } from '@proj-airi/stage-shared'
 import { computedAsync, useAsyncState, useIntervalFn } from '@vueuse/core'
 import { listModels } from '@xsai/model'
 import { uniqBy } from 'es-toolkit'
@@ -883,7 +883,11 @@ export const useProviderStore = defineStore('provider', () => {
     await waitForProviderMetadata()
     const definition = getProviderDefinition(providerId)
 
-    // Providers that don't require credentials use empty config
+    // Enforce distribution policy before consulting saved or cached providers.
+    if (isSteamDistribution() && definition.configuredBy !== 'authentication' && definition.id !== 'speech-noop')
+      throw new Error('This provider is not available in the Steam edition.')
+
+    // Providers that don't require credentials use empty config.
     let config = providerCredentials.value[providerId]
     const noCredentials = definition.requiresCredentials === false || providerId === 'browser-web-speech-api'
     if (!config && noCredentials) {
@@ -953,6 +957,8 @@ export const useProviderStore = defineStore('provider', () => {
         continue
 
       const definition = getProviderDefinition(provider.id)
+      if (isSteamDistribution() && definition.configuredBy !== 'authentication' && definition.id !== 'speech-noop')
+        continue
       if (isCustomProvidersDisabled() && definition.requiresCredentials !== false)
         continue
 

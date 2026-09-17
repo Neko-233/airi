@@ -2,7 +2,7 @@ import type { Session, User } from 'better-auth'
 
 import { isGenerationProvider } from '@proj-airi/provider-inference'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 
 import { OFFICIAL_SPEECH_PROVIDER_ID, OFFICIAL_SPEECH_STREAMING_PROVIDER_ID, OFFICIAL_TRANSCRIPTION_PROVIDER_ID } from '../../libs/providers/providers/official'
@@ -52,6 +52,19 @@ function createAuthenticatedState(): { session: Session, token: string, user: Us
 }
 
 describe('provider store synchronization boundary', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  // ROOT CAUSE:
+  // Credential-free providers bypassed the custom-provider filter in Steam.
+  // An existing configuration could therefore invoke an unmanaged service.
+  it('rejects unmanaged provider execution in Steam', async () => {
+    vi.stubEnv('VITE_DISTRIBUTION', 'steam')
+    const store = useProviderStore()
+    await expect(store.getProviderInstance('browser-web-speech-api'))
+      .rejects
+      .toThrow('This provider is not available in the Steam edition.')
+  })
+
   beforeEach(() => {
     setActivePinia(createPinia())
     mocks.updateCredits.mockClear()

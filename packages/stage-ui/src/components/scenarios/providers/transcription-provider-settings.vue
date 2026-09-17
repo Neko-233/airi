@@ -37,6 +37,11 @@ const providerMetadata = computedAsync(async () => {
   return await selectProviderMetadata(definition, t, { id: props.providerId })
 }, undefined)
 
+// Managed providers obtain credentials and endpoints from the signed-in account.
+const usesManagedAuthentication = computed(() =>
+  providersStore.getProviderDefinition(props.providerId)?.configuredBy === 'authentication',
+)
+
 // Common provider settings
 const apiKey = computed({
   get: () => providers.value[props.providerId]?.apiKey as string | undefined || '',
@@ -80,7 +85,7 @@ function handleResetTranscriptionSettings() {
     :on-back="() => router.back()"
   >
     <div flex="~ col md:row gap-6">
-      <ProviderSettingsContainer class="w-full md:w-[40%]">
+      <ProviderSettingsContainer v-if="!usesManagedAuthentication" class="w-full md:w-[40%]">
         <!-- Basic settings section -->
         <ProviderBasicSettings
           :title="t('settings.pages.providers.common.section.basic.title')"

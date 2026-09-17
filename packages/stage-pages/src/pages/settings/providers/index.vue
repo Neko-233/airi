@@ -2,7 +2,7 @@
 import type { ProviderDeployment, ProviderPricing } from '@proj-airi/stage-ui/libs/providers/attributes'
 import type { Ref } from 'vue'
 
-import { isCustomProvidersDisabled } from '@proj-airi/stage-shared'
+import { isCustomProvidersDisabled, isSteamDistribution } from '@proj-airi/stage-shared'
 import { IconStatusItem, RippleGrid } from '@proj-airi/stage-ui/components'
 import { useAnalytics } from '@proj-airi/stage-ui/composables'
 import { useRippleGridState } from '@proj-airi/stage-ui/composables/use-ripple-grid-state'
@@ -54,6 +54,8 @@ const {
 } = storeToRefs(providersStore)
 
 const allArtistryProvidersMetadata = computed<ProviderSourceCard[]>((): ProviderSourceCard[] => {
+  if (isSteamDistribution())
+    return []
   return [
     {
       id: 'comfyui',
@@ -145,6 +147,11 @@ const providerBlocksConfig: ProviderBlockConfig[] = [
     providersRef: allArtistryProvidersMetadata,
   },
 ]
+
+if (isSteamDistribution()) {
+  const artistryIndex = providerBlocksConfig.findIndex(block => block.id === 'artistry')
+  providerBlocksConfig.splice(artistryIndex, 1)
+}
 
 const activeTabId = ref(providerBlocksConfig[0].id)
 const filterPricing = ref<'all' | 'free' | 'paid'>('all')
