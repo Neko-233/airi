@@ -21,6 +21,7 @@ import vadWorkletUrl from '../../workers/vad/process.worklet?worker&url'
 
 import { useAnalytics } from '../../composables/use-analytics'
 import { activeTurnSpan, startSpan } from '../../composables/use-io-tracer'
+import { prepareOfficialTranscriptionRecording } from '../../libs/audio/transcription-recording'
 import { createVadStreamingSession } from '../../libs/audio/vad-streaming-session'
 import { OFFICIAL_TRANSCRIPTION_PROVIDER_ID } from '../../libs/providers'
 import { APPLE_SPEECH_TRANSCRIPTION_PROVIDER_ID, executeAppleSpeechStream } from '../../libs/providers/providers/apple-speech'
@@ -415,7 +416,7 @@ export const useHearingStore = defineStore('hearing-store', () => {
     format?: 'json' | 'verbose_json',
     options?: HearingTranscriptionInvokeOptions,
   ): Promise<HearingTranscriptionResult> {
-    const normalizedInput = (input instanceof File ? { file: input } : input ?? {}) as {
+    const normalizedInput = (input instanceof File ? { file: input } : { ...input }) as {
       file?: File
       fileName?: string
       inputAudioStream?: ReadableStream<ArrayBuffer | ArrayBufferView>
@@ -446,6 +447,9 @@ export const useHearingStore = defineStore('hearing-store', () => {
     }
 
     try {
+      if (providerId === OFFICIAL_TRANSCRIPTION_PROVIDER_ID && normalizedInput.file && !normalizedInput.inputAudioStream)
+        normalizedInput.file = await prepareOfficialTranscriptionRecording(normalizedInput.file)
+
       if (features.supportsStreamOutput && streamExecutor) {
         // TODO: integrate VAD-driven silence detection to stop and restart realtime sessions based on silence thresholds.
         const request = provider.transcription(model, options?.providerOptions)
