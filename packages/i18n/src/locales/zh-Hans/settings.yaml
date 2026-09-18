@@ -925,6 +925,7 @@ pages:
     buy: 充值
     currency: 币种
     description: 充值 Flux
+    steamAllowance: 官方 AI 服务费用由 AIRI 项目承担。本版本使用账号现有的免费额度，不提供充值。额度用尽后，需要 Flux 的功能将暂停。重新登录不会再次获得新账号赠送额度。
     packagesError: 暂时无法获取可用的 Flux 电量包。可以之后再试试吗？
     checkout:
       success: 谢谢你！你的 Flux 通量已经更新好啦～

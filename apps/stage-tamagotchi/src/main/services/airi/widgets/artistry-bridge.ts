@@ -469,6 +469,9 @@ export async function setupArtistryBridge(params: {
     })
 
     defineInvokeHandler(params.context, artistrySyncConfig, (payload) => {
+      if (import.meta.env.VITE_DISTRIBUTION === 'steam')
+        return
+
       log.log(`🔄 Syncing artistry config to main. Provider: ${payload.provider}`)
       params.artistryConfig.update({
         artistryProvider: payload.provider || params.artistryConfig.get()?.artistryProvider || DEFAULT_ARTISTRY_PROVIDER,
@@ -495,6 +498,9 @@ export async function setupArtistryBridge(params: {
     })
 
     defineInvokeHandler(params.context, artistryTestComfyUIConnection, async (payload) => {
+      if (import.meta.env.VITE_DISTRIBUTION === 'steam')
+        return { ok: false, info: 'Image generation is not available in the Steam edition.' }
+
       log.log(`🔌 Testing ComfyUI connection at: ${payload.url}`)
       try {
         const url = payload.url.replace(/\/+$/, '')

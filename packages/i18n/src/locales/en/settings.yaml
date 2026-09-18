@@ -963,6 +963,7 @@ pages:
     buy: Charge
     currency: Currency
     description: Current Flux
+    steamAllowance: AIRI pays for the official AI services. This edition uses your account's existing free allowance and offers no top-ups. Features that require Flux pause when it runs out. Signing in again does not repeat the new-account grant.
     packagesError: Failed to load packages. Please try again later.
     checkout:
       success: Payment successful! Your Flux has been topped up.

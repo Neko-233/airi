@@ -10,6 +10,7 @@ import { trackButtonPlugin } from '@proj-airi/stage-ui/directives/track-button'
 import { browserAuthorizationHandler, registerAuthorizationHandler } from '@proj-airi/stage-ui/libs/auth'
 import { piniaPluginTracing, setupSynced } from '@proj-airi/stage-ui/libs/pinia'
 import { configureAnalyticsAdapter } from '@proj-airi/stage-ui/libs/product-signals'
+import { isProviderAllowedInDistribution } from '@proj-airi/stage-ui/libs/providers/distribution'
 import { MotionPlugin } from '@vueuse/motion'
 import { createPinia } from 'pinia'
 import { setupLayouts } from 'virtual:generated-layouts'
@@ -67,11 +68,11 @@ router.beforeEach((to) => {
   if (!isSteamDistribution())
     return
 
-  if (/^\/settings\/modules\/(?:artistry|web-search)(?:\/|$)/.test(to.path))
+  if (/^\/settings\/modules\/(?:artistry|web-search|messaging-discord|x)(?:\/|$)/.test(to.path))
     return '/settings/modules'
 
   const providerRoute = /^\/settings\/providers\/[^/]+\/([^/]+)/.exec(to.path)
-  if (providerRoute && !['official-provider', 'official-provider-speech', 'official-provider-speech-streaming', 'official-provider-transcription', 'speech-noop'].includes(providerRoute[1]))
+  if (providerRoute && !isProviderAllowedInDistribution(providerRoute[1]))
     return '/settings/providers'
 })
 

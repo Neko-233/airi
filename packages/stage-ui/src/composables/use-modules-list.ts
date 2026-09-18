@@ -178,7 +178,7 @@ export function useModulesList() {
           category: 'essential',
         }]
       : []),
-  ].filter(module => !isSteamDistribution() || !['web-search', 'artistry'].includes(module.id)))
+  ].filter(module => !isSteamDistribution() || !['web-search', 'artistry', 'messaging-discord', 'x'].includes(module.id)))
 
   const categorizedModules = computed(() => {
     return modulesList.value.reduce((categories, module) => {

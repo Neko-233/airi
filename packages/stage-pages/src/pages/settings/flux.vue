@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { FluxBalanceBucket } from '@proj-airi/stage-ui/composables/use-analytics'
 
-import { isFluxPurchaseDisabled, isStageTamagotchi } from '@proj-airi/stage-shared'
+import { isFluxPurchaseDisabled, isStageTamagotchi, isSteamDistribution } from '@proj-airi/stage-shared'
 import { client } from '@proj-airi/stage-ui/composables/api'
 import { useAnalytics } from '@proj-airi/stage-ui/composables/use-analytics'
 import { useAuthStore } from '@proj-airi/stage-ui/stores/auth'
@@ -384,6 +384,9 @@ async function handleBuy(stripePriceId: string) {
           </h2>
           <p text="sm neutral-500">
             {{ t(fluxPurchaseDisabled ? 'settings.pages.account.fluxBalance' : 'settings.pages.flux.description') }}
+          </p>
+          <p v-if="isSteamDistribution()">
+            {{ t('settings.pages.flux.steamAllowance') }}
           </p>
         </div>
       </div>

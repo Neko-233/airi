@@ -6,7 +6,7 @@ import type { ChatRequestOptions, ModelInfo, ProviderDefinition, ProviderInstanc
 
 import { errorMessageFrom } from '@moeru/std'
 import { getGenerationProvider } from '@proj-airi/provider-inference'
-import { isCustomProvidersDisabled, isSteamDistribution } from '@proj-airi/stage-shared'
+import { isCustomProvidersDisabled } from '@proj-airi/stage-shared'
 import { computedAsync, useAsyncState, useIntervalFn } from '@vueuse/core'
 import { listModels } from '@xsai/model'
 import { uniqBy } from 'es-toolkit'
@@ -22,6 +22,7 @@ import {
   listProviders as listDefinedProviders,
   validateProvider as runProviderValidation,
 } from '../../libs/providers'
+import { isProviderAllowedInDistribution } from '../../libs/providers/distribution'
 import { selectProviderMetadata, selectProvidersMetadata } from '../../libs/providers/metadata'
 import { useAuthStore } from '../auth'
 import { useProviderConfigStore } from './config'
@@ -699,7 +700,7 @@ export const useProviderStore = defineStore('provider', () => {
   // Function to fetch models for a specific provider
   async function fetchModelsForProvider(providerId: string) {
     const definition = findProviderDefinition(providerId)
-    if (!definition)
+    if (!definition || !isProviderAllowedInDistribution(definition.id))
       return { models: [] }
 
     const config = providerCredentials.value[providerId]
@@ -776,10 +777,16 @@ export const useProviderStore = defineStore('provider', () => {
 
   // Get models for a specific provider
   function getModelsForProvider(providerId: string) {
+    const definition = findProviderDefinition(providerId)
+    if (definition && !isProviderAllowedInDistribution(definition.id))
+      return emptyProviderModels
     return providerRuntimeState.value[providerId]?.models ?? emptyProviderModels
   }
 
   const getDefaultModelForProvider = computed(() => (providerId: string) => {
+    const definition = findProviderDefinition(providerId)
+    if (definition && !isProviderAllowedInDistribution(definition.id))
+      return null
     return providerRuntimeState.value[providerId]?.defaultModel ?? null
   })
 
@@ -884,7 +891,7 @@ export const useProviderStore = defineStore('provider', () => {
     const definition = getProviderDefinition(providerId)
 
     // Enforce distribution policy before consulting saved or cached providers.
-    if (isSteamDistribution() && definition.configuredBy !== 'authentication' && definition.id !== 'speech-noop')
+    if (!isProviderAllowedInDistribution(definition.id))
       throw new Error('This provider is not available in the Steam edition.')
 
     // Providers that don't require credentials use empty config.
@@ -957,7 +964,7 @@ export const useProviderStore = defineStore('provider', () => {
         continue
 
       const definition = getProviderDefinition(provider.id)
-      if (isSteamDistribution() && definition.configuredBy !== 'authentication' && definition.id !== 'speech-noop')
+      if (!isProviderAllowedInDistribution(definition.id))
         continue
       if (isCustomProvidersDisabled() && definition.requiresCredentials !== false)
         continue

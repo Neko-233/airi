@@ -2,13 +2,14 @@ import en from '@proj-airi/i18n/locales/en'
 
 import { toWav } from '@proj-airi/audio/encoding'
 import { createPinia, disposePinia } from 'pinia'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
 import { createI18n } from 'vue-i18n'
 
 import { useHearingStore } from './hearing'
 
 describe('official recording transport', () => {
+  afterEach(() => vi.unstubAllEnvs())
   // ROOT CAUSE: The recorder produces WAV at the input device sample rate,
   // but the official endpoint reads raw mono PCM16 at 16 kHz.
   it.each([16000, 48000])('normalizes a %i Hz WAV before uploading it', async (sampleRate) => {
@@ -24,6 +25,10 @@ describe('official recording transport', () => {
       .use(pinia)
     app.mount(document.createElement('div'))
     try {
+      vi.stubEnv('VITE_DISTRIBUTION', 'steam')
+      hearing.activeTranscriptionProvider = 'browser-web-speech-api'
+      expect(hearing.configured).toBe(false)
+      hearing.activeTranscriptionProvider = 'official-provider-transcription'
       const samples = new Float32Array(sampleRate * 2).fill(0.25)
       const file = new File([toWav(samples.buffer, sampleRate, 2)], 'recording.wav', { type: 'audio/wav' })
       let uploaded = new ArrayBuffer(0)

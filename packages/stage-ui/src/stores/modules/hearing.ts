@@ -24,6 +24,7 @@ import { activeTurnSpan, startSpan } from '../../composables/use-io-tracer'
 import { prepareOfficialTranscriptionRecording } from '../../libs/audio/transcription-recording'
 import { createVadStreamingSession } from '../../libs/audio/vad-streaming-session'
 import { OFFICIAL_TRANSCRIPTION_PROVIDER_ID } from '../../libs/providers'
+import { isProviderAllowedInDistribution } from '../../libs/providers/distribution'
 import { APPLE_SPEECH_TRANSCRIPTION_PROVIDER_ID, executeAppleSpeechStream } from '../../libs/providers/providers/apple-speech'
 import { streamTranscription } from '../../libs/providers/stream-transcription'
 import { useVAD } from '../ai/models/vad'
@@ -379,7 +380,7 @@ export const useHearingStore = defineStore('hearing-store', () => {
   }
 
   const configured = computed(() => {
-    if (!activeTranscriptionProvider.value)
+    if (!activeTranscriptionProvider.value || !isProviderAllowedInDistribution(activeTranscriptionProvider.value))
       return false
 
     // Web Speech API doesn't strictly need a model selected (it has a default)
@@ -416,6 +417,9 @@ export const useHearingStore = defineStore('hearing-store', () => {
     format?: 'json' | 'verbose_json',
     options?: HearingTranscriptionInvokeOptions,
   ): Promise<HearingTranscriptionResult> {
+    if (!isProviderAllowedInDistribution(providerId))
+      throw new Error('This provider is not available in the Steam edition.')
+
     const normalizedInput = (input instanceof File ? { file: input } : { ...input }) as {
       file?: File
       fileName?: string
@@ -998,6 +1002,9 @@ export const useHearingSpeechInputPipeline = defineStore('modules:hearing:speech
 
     try {
       const providerId = activeTranscriptionProvider.value
+      if (!isProviderAllowedInDistribution(providerId))
+        throw new Error('This provider is not available in the Steam edition.')
+
       const providerError = resolveActiveTranscriptionProviderError(providerId)
       if (providerError) {
         error.value = providerError

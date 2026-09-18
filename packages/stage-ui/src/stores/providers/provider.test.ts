@@ -52,7 +52,45 @@ function createAuthenticatedState(): { session: Session, token: string, user: Us
 }
 
 describe('provider store synchronization boundary', () => {
-  afterEach(() => vi.unstubAllEnvs())
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+  })
+
+  // ROOT CAUSE: Steam allowed every authenticated provider, including the
+  // streaming service that returned no audio in the Windows review build.
+  it('rejects official streaming speech execution in Steam', async () => {
+    vi.stubEnv('VITE_DISTRIBUTION', 'steam')
+    await expect(useProviderStore().getProviderInstance(OFFICIAL_SPEECH_STREAMING_PROVIDER_ID))
+      .rejects
+      .toThrow('This provider is not available in the Steam edition.')
+  })
+
+  it('lists ordinary speech but not streaming speech in Steam', async () => {
+    vi.stubEnv('VITE_DISTRIBUTION', 'steam')
+    const store = useProviderStore()
+    await vi.waitFor(() => expect(store.allAudioSpeechProvidersMetadata.map(provider => provider.id)).toContain(OFFICIAL_SPEECH_PROVIDER_ID))
+    expect(store.allAudioSpeechProvidersMetadata.map(provider => provider.id)).not.toContain(OFFICIAL_SPEECH_STREAMING_PROVIDER_ID)
+  })
+
+  // ROOT CAUSE: The ordinary speech dropdown merged cached streaming models
+  // directly. Saved provider configuration also triggered catalog requests.
+  it('hides cached streaming models and skips their discovery in Steam', async () => {
+    vi.stubEnv('VITE_DISTRIBUTION', 'steam')
+    const fetchCatalog = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ models: [] }))
+    const store = useProviderStore()
+    await store.initializeProvider(OFFICIAL_SPEECH_STREAMING_PROVIDER_ID)
+    store.providerRuntimeState[OFFICIAL_SPEECH_STREAMING_PROVIDER_ID].models = [{
+      id: 'streaming-model',
+      name: 'Streaming model',
+      provider: OFFICIAL_SPEECH_STREAMING_PROVIDER_ID,
+    }]
+    store.providerRuntimeState[OFFICIAL_SPEECH_STREAMING_PROVIDER_ID].defaultModel = 'streaming-model'
+    expect(store.getModelsForProvider(OFFICIAL_SPEECH_STREAMING_PROVIDER_ID)).toEqual([])
+    expect(store.getDefaultModelForProvider(OFFICIAL_SPEECH_STREAMING_PROVIDER_ID)).toBeNull()
+    await store.fetchModelsForProvider(OFFICIAL_SPEECH_STREAMING_PROVIDER_ID)
+    expect(fetchCatalog).not.toHaveBeenCalled()
+  })
 
   // ROOT CAUSE:
   // Credential-free providers bypassed the custom-provider filter in Steam.
