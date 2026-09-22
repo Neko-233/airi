@@ -56,6 +56,7 @@ export interface StreamingTtsPipelineOptions extends StreamingTtsPipelineEvents 
   ttsSource?: 'chat_auto_tts' | 'manual_preview' | 'settings_test'
   /** Low-cardinality voice bucket sent to server-side product analytics. */
   ttsVoiceType?: 'official_default' | 'official_selected' | 'custom_configured' | 'voice_pack' | 'unknown'
+  turnId?: string
   /**
    * Decoder context. The pipeline calls `decodeAudioData` on it for each
    * sentence (or once at session end in buffered mode). Reusing the page's
@@ -136,6 +137,7 @@ export function createStreamingTtsPipeline(options: StreamingTtsPipelineOptions)
     ttsTrigger: options.ttsTrigger ?? 'auto',
     ttsSource: options.ttsSource ?? 'chat_auto_tts',
     ttsVoiceType: options.ttsVoiceType ?? 'unknown',
+    turnId: options.turnId,
   })
   const ws = new WebSocket(wsUrl)
   ws.binaryType = 'arraybuffer'
@@ -429,6 +431,7 @@ function toWebSocketUrl(
     ttsTrigger: 'auto' | 'manual'
     ttsSource: 'chat_auto_tts' | 'manual_preview' | 'settings_test'
     ttsVoiceType: 'official_default' | 'official_selected' | 'custom_configured' | 'voice_pack' | 'unknown'
+    turnId?: string
   },
 ): string {
   const u = new URL(path, httpBase)
@@ -437,6 +440,8 @@ function toWebSocketUrl(
   u.searchParams.set('tts_trigger', analytics.ttsTrigger)
   u.searchParams.set('tts_source', analytics.ttsSource)
   u.searchParams.set('tts_voice_type', analytics.ttsVoiceType)
+  if (analytics.turnId)
+    u.searchParams.set('turn_id', analytics.turnId)
   return u.toString()
 }
 

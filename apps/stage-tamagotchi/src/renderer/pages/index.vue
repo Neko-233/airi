@@ -39,6 +39,8 @@ import ResourceStatusIsland from '../components/stage-islands/resource-status-is
 
 import { electronOpenOnboarding } from '../../shared/eventa'
 import { useModelSettingsRuntimeOwner } from '../composables/model-settings-runtime-owner'
+import { useScreenAmbientLight } from '../composables/use-screen-ambient-light'
+import { stageOpaqueAttribute } from '../composables/use-stage-painted-mask'
 import { useControlsIslandStore } from '../stores/controls-island'
 import { useStageWindowLifecycleStore } from '../stores/stage-window-lifecycle'
 import { resolveFadeOnHoverInteraction } from '../utils/fade-on-hover'
@@ -53,6 +55,9 @@ import {
 const controlsIslandRef = ref<InstanceType<typeof ControlsIsland>>()
 const controlsIslandInteractionActive = shallowRef(false)
 const widgetStageRef = ref<InstanceType<typeof WidgetStage>>()
+// The stage canvas alpha tells the sampler which pixels of the window AIRI
+// paints, so it can read the desktop showing through behind the character.
+useScreenAmbientLight({ stageCanvas: () => widgetStageRef.value?.canvasElement() })
 const stageCanvas = toRef(() => widgetStageRef.value?.canvasElement())
 const componentStateStage = ref<'pending' | 'loading' | 'mounted'>('pending')
 const stageMounted = computed(() => componentStateStage.value === 'mounted')
@@ -117,13 +122,13 @@ const isTransparent = computed(() => {
   if (stagePaused.value || componentStateStage.value !== 'mounted' || !fadeOnHoverEnabled.value)
     return true
 
+  // TresCanvas leaves preserveDrawingBuffer off, so VRM's canvas reads back empty and
+  // has to sample an offscreen render target. Every other renderer keeps its last frame
+  // readable, and a renderer with no canvas samples nothing and stays visible.
   if (stageModelRenderer.value === 'vrm')
     return shouldUseThreeTransparencyHitTest.value ? isTransparentByThree.value : true
 
-  if (stageModelRenderer.value === 'live2d' || stageModelRenderer.value === 'tachie')
-    return isTransparentByPixels.value
-
-  return true
+  return isTransparentByPixels.value
 })
 /**
  * Whether the cursor sits on the stage canvas rather than on interface drawn over it.
@@ -141,18 +146,17 @@ const isPointerOverStageCanvas = computed(() =>
  * Drives native click-through, and runs whether or not Auto Hide is on.
  *
  * `true` surrenders the pixel to the app below, the opposite sense of
- * {@link isTransparent}. Every branch that cannot answer reports `false` and keeps the
- * window interactive: an unmounted stage, a scene swap that left no canvas behind, and
- * the renderers this does not cover yet. Godot needs that `false`, because it draws a
- * DOM panel rather than to the canvas.
+ * {@link isTransparent}. The samplers report a missing canvas as transparent, so the
+ * guards below are what keep the window interactive when nothing can answer. Godot
+ * lands there: it draws a DOM panel and exposes no canvas to read.
  */
 const isTransparentForMouseEvents = computed(() => {
   if (stagePaused.value || componentStateStage.value !== 'mounted')
     return false
 
-  // A scene swap unmounts the canvas while the state still reads mounted. The samplers
-  // report a missing canvas as transparent, which would hand the whole window away,
-  // character included, until the next scene reports itself.
+  // Load-bearing, not a convenience. A scene swap unmounts the canvas while the state
+  // still reads mounted, and both samplers answer "transparent" without one, which would
+  // hand the whole window away, character included, until the next scene reports itself.
   if (!stageCanvas.value)
     return false
 
@@ -162,10 +166,7 @@ const isTransparentForMouseEvents = computed(() => {
   if (stageModelRenderer.value === 'vrm')
     return shouldUseThreeTransparencyHitTest.value ? isTransparentByThreeExact.value : false
 
-  if (stageModelRenderer.value === 'live2d' || stageModelRenderer.value === 'tachie')
-    return isTransparentByPixelsExact.value
-
-  return false
+  return isTransparentByPixelsExact.value
 })
 
 const { isNearAnyBorder: isAroundWindowBorder } = useElectronMouseAroundWindowBorder({ threshold: 10 })
@@ -837,6 +838,14 @@ const cursorPosition = computed(() => ({
           'transition-opacity duration-250 ease-in-out',
         ]"
       >
+        <!--
+          Every element that paints over the stage carries the opaque marker,
+          so that the screen sampler does not read AIRI's own colors as desktop
+          light. ResourceStatusIsland marks its pill itself, because its root
+          spans the whole stage width. Tooltips and dialogs need none: reka-ui
+          portals them to the body and the mask finds them there. HoloCoupon
+          never renders (v-if="false").
+        -->
         <ResourceStatusIsland />
         <WidgetStage
           ref="widgetStageRef"
@@ -850,6 +859,7 @@ const cursorPosition = computed(() => ({
         <ControlsIslandRoot :frozen="controlsIslandInteractionActive">
           <ControlsIsland
             ref="controlsIslandRef"
+            :[stageOpaqueAttribute]="true"
             @interaction-change="controlsIslandInteractionActive = $event"
           />
         </ControlsIslandRoot>
