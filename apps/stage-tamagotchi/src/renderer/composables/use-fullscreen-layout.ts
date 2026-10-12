@@ -1,7 +1,7 @@
-import type { InjectionKey } from 'vue'
+import type { InjectionKey, MaybeRefOrGetter } from 'vue'
 
 import { useElementBounding, useLocalStorage, useWindowSize } from '@vueuse/core'
-import { computed, inject, provide, shallowRef } from 'vue'
+import { computed, inject, provide, shallowRef, toValue } from 'vue'
 
 import { SETTINGS_WINDOW_WIDTH } from '../../shared/settings-window'
 
@@ -14,8 +14,17 @@ const SURFACE_MIN_WIDTH = SETTINGS_WINDOW_WIDTH
 /** The space between the surface and the top and right edges of the area. */
 const SURFACE_MARGIN = 24
 
-function createFullscreenLayout() {
+/** The final work area shared by the layers inside the animated clip. Dimensions use CSS pixels. */
+export interface FullscreenArea { width: number, height: number }
+
+function createFullscreenLayout(area?: MaybeRefOrGetter<FullscreenArea | undefined>) {
   const { width: windowWidth } = useWindowSize()
+  const workArea = computed(() => toValue(area))
+  // The main window clips to its work area. Its viewport can extend beyond that area after a native resize.
+  const layoutWidth = computed(() => workArea.value?.width ?? windowWidth.value)
+  const areaStyle = computed(() => workArea.value
+    ? { width: `${workArea.value.width}px`, height: `${workArea.value.height}px` }
+    : undefined)
   /** The surface width that the user chose by dragging its edge. `0` keeps the default share. */
   const surfaceWidthChoice = useLocalStorage('fullscreen/surface-width', 0)
   /** The drag of the surface edge: the pointer, where it started, and the width it gives now. */
@@ -51,7 +60,7 @@ function createFullscreenLayout() {
     return { width: Math.round(area.width * STAGE_SHARE), height: area.height }
   }
 
-  const surfaceWidth = computed(() => surfaceWidthIn(windowWidth.value))
+  const surfaceWidth = computed(() => surfaceWidthIn(layoutWidth.value))
 
   function startSurfaceDrag(event: PointerEvent) {
     if (event.currentTarget instanceof HTMLElement)
@@ -64,7 +73,7 @@ function createFullscreenLayout() {
     if (drag?.pointerId !== event.pointerId)
       return
     // The surface sits on the right, so moving its left edge to the left widens it.
-    surfaceDrag.value = { ...drag, width: clampSurfaceWidth(drag.startWidth + drag.startX - event.clientX, windowWidth.value) }
+    surfaceDrag.value = { ...drag, width: clampSurfaceWidth(drag.startWidth + drag.startX - event.clientX, layoutWidth.value) }
   }
 
   /** Ends a drag and keeps the width it gave, so the next fullscreen mode opens with it. */
@@ -77,14 +86,16 @@ function createFullscreenLayout() {
   }
 
   return {
+    /** Keeps inner layers at their final dimensions while the host animates its outer clip. */
+    areaStyle,
     /** The space between the surface and the top and right edges of the area. */
     surfaceMargin: SURFACE_MARGIN,
-    /** The surface width in the window as it is now. */
+    /** The surface width inside the host area. */
     surfaceWidth,
     /** Whether the user drags the surface edge now. */
     surfaceDragging: computed(() => !!surfaceDrag.value),
-    /** The stage offset in the window as it is now. */
-    stageOffset: computed(() => stageOffsetIn(windowWidth.value)),
+    /** The stage offset inside the host area. */
+    stageOffset: computed(() => stageOffsetIn(layoutWidth.value)),
     stageOffsetIn,
     stageSizeIn,
     islandElement,
@@ -102,7 +113,7 @@ export type FullscreenLayout = ReturnType<typeof createFullscreenLayout>
 const fullscreenLayoutKey: InjectionKey<FullscreenLayout> = Symbol('fullscreen-layout')
 
 /**
- * Creates the layout of the fullscreen mode and gives it to the overlay.
+ * Creates the fullscreen layout for the host area. Without an explicit width, the host fills its viewport.
  *
  * Use when:
  * - A page hosts the fullscreen mode. It places its stage with the result.
@@ -110,8 +121,8 @@ const fullscreenLayoutKey: InjectionKey<FullscreenLayout> = Symbol('fullscreen-l
  * Returns:
  * - The layout. The overlay under this page reads the same one through {@link useFullscreenLayout}.
  */
-export function provideFullscreenLayout(): FullscreenLayout {
-  const layout = createFullscreenLayout()
+export function provideFullscreenLayout(area?: MaybeRefOrGetter<FullscreenArea | undefined>): FullscreenLayout {
+  const layout = createFullscreenLayout(area)
   provide(fullscreenLayoutKey, layout)
   return layout
 }

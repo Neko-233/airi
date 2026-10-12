@@ -14,7 +14,7 @@ import { fullscreenSurfaces } from './surfaces'
 // mode shows this one component, so the mode looks and works the same in each of them.
 const { t } = useI18n()
 const { surface, mounted } = storeToRefs(useFullscreenStore())
-const { islandElement, surfaceMargin, surfaceWidth, surfaceDragging, startSurfaceDrag, moveSurfaceDrag, endSurfaceDrag } = useFullscreenLayout()
+const { areaStyle, islandElement, surfaceMargin, surfaceWidth, surfaceDragging, startSurfaceDrag, moveSurfaceDrag, endSurfaceDrag } = useFullscreenLayout()
 
 // The settings layout draws the panel content instead of the settings window frame when it shows here.
 provide(fullscreenPanelKey, true)
@@ -27,7 +27,7 @@ watchSyncEffect(() => {
 
 <template>
   <!-- The content keeps its final layout from the bottom left, so a host can show it step by step by clipping it. -->
-  <div :class="['absolute bottom-0 left-0 h-screen w-screen']">
+  <div :style="areaStyle" :class="['absolute bottom-0 left-0 h-full w-full']">
     <div ref="island" :class="['pointer-events-auto absolute left-6 top-1/2 -translate-y-1/2']">
       <FullscreenIsland />
     </div>

@@ -325,6 +325,7 @@ const stageLayout = shallowRef<StageLayout>()
  * which keep their final layout, so they show as the area grows.
  */
 const fullscreenArea = shallowRef<{ width: number, height: number }>()
+const fullscreenWorkArea = shallowRef<{ width: number, height: number }>()
 /** The direction that the stage and the area move in now. `false` sets them at once. */
 const fullscreenMotion = shallowRef<'open' | 'close' | false>(false)
 type StageLayoutBounds = Awaited<ReturnType<typeof enterFullscreenWindow>>['bounds']
@@ -342,7 +343,8 @@ const FULLSCREEN_MOTION = {
   close: { duration: 400, curve: [0.34, 1.1, 0.64, 1] },
 } satisfies Record<string, FullscreenMotion>
 /** The surface width, its drag, and the place of the stage beside the surface. The overlay reads the same layout. */
-const fullscreenLayout = provideFullscreenLayout()
+const fullscreenLayout = provideFullscreenLayout(fullscreenWorkArea)
+const { areaStyle: fullscreenContentStyle } = fullscreenLayout
 
 // The canvas keeps its size while the surface width changes, and the open stage follows by moving at once. A change
 // during a transition waits, because it would cut the transition that the mode waits for.
@@ -431,6 +433,7 @@ async function expandToFullscreen() {
   try {
     const { bounds, workArea } = await enterFullscreenWindow()
     const plan = planFor(bounds, workArea)
+    fullscreenWorkArea.value = workArea
     const { height } = FULLSCREEN_MOTION
 
     fullscreenMotion.value = false
@@ -498,6 +501,7 @@ function clearFullscreenLayout() {
   fullscreenMotion.value = false
   stageLayout.value = undefined
   fullscreenArea.value = undefined
+  fullscreenWorkArea.value = undefined
 }
 
 /**
@@ -532,6 +536,7 @@ async function resumeFullscreen() {
     }
     const plan = planFor(state.home, state.workArea)
     fullscreenMotion.value = false
+    fullscreenWorkArea.value = state.workArea
     stageLayout.value = { ...plan.stage, scale: 1, offsetX: fullscreenLayout.stageOffsetIn(plan.workArea.width) }
     fullscreenArea.value = { width: plan.workArea.width, height: plan.workArea.height }
     await setFullscreenWindowBounds({ bounds: plan.workArea })
@@ -821,7 +826,7 @@ const cursorPosition = computed(() => ({
     :style="fullscreenAreaStyle"
     :class="['fixed left-0 top-0 z-1 overflow-hidden']"
   >
-    <FullscreenBackdrop />
+    <FullscreenBackdrop :style="fullscreenContentStyle" />
   </div>
   <div
     v-if="fullscreenAreaStyle"
